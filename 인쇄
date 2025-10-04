@@ -1,0 +1,317 @@
+#!/usr/bin/python3
+import sys
+import os
+import gi
+gi.require_version('Gtk', '3.0')
+from gi.repository import Gtk, GdkPixbuf, Gdk
+import math
+
+debug_log = open('/tmp/nautilus_print_python.log', 'w')
+
+# Print settings
+class PrintSettings:
+    def __init__(self):
+        self.scale_mode = 'fit'  # fit, actual, shrink, custom
+        self.custom_scale = 100
+        self.alignment = 'center'  # center, topleft, topright, bottomleft, bottomright
+        self.margin_mode = 'default'  # none, default, custom
+        self.margins = {'top': 10, 'bottom': 10, 'left': 10, 'right': 10}  # mm
+        self.keep_aspect = True
+        self.rotation = 'auto'  # auto, 0, 90, 180, 270
+        self.dpi = 300
+        self.multi_mode = 'one_per_page'  # one_per_page, grid_2x2, grid_3x3
+        
+settings = PrintSettings()
+
+# Custom settings widget
+class PrintSettingsWidget(Gtk.Box):
+    def __init__(self):
+        super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        self.set_border_width(10)
+        
+        # Scale mode
+        frame = Gtk.Frame(label="크기 조절 모드")
+        vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
+        vbox.set_border_width(10)
+        
+        self.scale_fit = Gtk.RadioButton.new_with_label_from_widget(None, "꽉 차게 (Fit to Page)")
+        self.scale_actual = Gtk.RadioButton.new_with_label_from_widget(self.scale_fit, "실제 크기 (100%)")
+        self.scale_shrink = Gtk.RadioButton.new_with_label_from_widget(self.scale_fit, "축소만 (Shrink to Fit)")
+        self.scale_custom = Gtk.RadioButton.new_with_label_from_widget(self.scale_fit, "사용자 정의")
+        
+        hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=5)
+        self.custom_scale_spin = Gtk.SpinButton()
+        self.custom_scale_spin.set_range(10, 500)
+        self.custom_scale_spin.set_value(100)
+        self.custom_scale_spin.set_increments(5, 25)
+        hbox.pack_start(self.scale_custom, False, False, 0)
+        hbox.pack_start(self.custom_scale_spin, False, False, 0)
+        hbox.pack_start(Gtk.Label(label="%"), False, False, 0)
+        
+        vbox.pack_start(self.scale_fit, False, False, 0)
+        vbox.pack_start(self.scale_actual, False, False, 0)
+        vbox.pack_start(self.scale_shrink, False, False, 0)
+        vbox.pack_start(hbox, False, False, 0)
+        frame.add(vbox)
+        self.pack_start(frame, False, False, 0)
+        
+        # Alignment
+        frame = Gtk.Frame(label="정렬")
+        vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
+        vbox.set_border_width(10)
+        
+        self.align_center = Gtk.RadioButton.new_with_label_from_widget(None, "가운데")
+        self.align_topleft = Gtk.RadioButton.new_with_label_from_widget(self.align_center, "좌상단")
+        self.align_topright = Gtk.RadioButton.new_with_label_from_widget(self.align_center, "우상단")
+        self.align_bottomleft = Gtk.RadioButton.new_with_label_from_widget(self.align_center, "좌하단")
+        self.align_bottomright = Gtk.RadioButton.new_with_label_from_widget(self.align_center, "우하단")
+        
+        vbox.pack_start(self.align_center, False, False, 0)
+        hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        hbox.pack_start(self.align_topleft, False, False, 0)
+        hbox.pack_start(self.align_topright, False, False, 0)
+        hbox.pack_start(self.align_bottomleft, False, False, 0)
+        hbox.pack_start(self.align_bottomright, False, False, 0)
+        vbox.pack_start(hbox, False, False, 0)
+        frame.add(vbox)
+        self.pack_start(frame, False, False, 0)
+        
+        # Margins
+        frame = Gtk.Frame(label="여백 (mm)")
+        vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
+        vbox.set_border_width(10)
+        
+        self.margin_none = Gtk.RadioButton.new_with_label_from_widget(None, "여백 없음")
+        self.margin_default = Gtk.RadioButton.new_with_label_from_widget(self.margin_none, "기본 여백")
+        self.margin_custom = Gtk.RadioButton.new_with_label_from_widget(self.margin_none, "사용자 정의")
+        
+        margin_grid = Gtk.Grid()
+        margin_grid.set_column_spacing(5)
+        margin_grid.set_row_spacing(5)
+        
+        self.margin_top = Gtk.SpinButton()
+        self.margin_top.set_range(0, 50)
+        self.margin_top.set_value(10)
+        self.margin_bottom = Gtk.SpinButton()
+        self.margin_bottom.set_range(0, 50)
+        self.margin_bottom.set_value(10)
+        self.margin_left = Gtk.SpinButton()
+        self.margin_left.set_range(0, 50)
+        self.margin_left.set_value(10)
+        self.margin_right = Gtk.SpinButton()
+        self.margin_right.set_range(0, 50)
+        self.margin_right.set_value(10)
+        
+        margin_grid.attach(Gtk.Label(label="상:"), 0, 0, 1, 1)
+        margin_grid.attach(self.margin_top, 1, 0, 1, 1)
+        margin_grid.attach(Gtk.Label(label="하:"), 2, 0, 1, 1)
+        margin_grid.attach(self.margin_bottom, 3, 0, 1, 1)
+        margin_grid.attach(Gtk.Label(label="좌:"), 0, 1, 1, 1)
+        margin_grid.attach(self.margin_left, 1, 1, 1, 1)
+        margin_grid.attach(Gtk.Label(label="우:"), 2, 1, 1, 1)
+        margin_grid.attach(self.margin_right, 3, 1, 1, 1)
+        
+        vbox.pack_start(self.margin_none, False, False, 0)
+        vbox.pack_start(self.margin_default, False, False, 0)
+        vbox.pack_start(self.margin_custom, False, False, 0)
+        vbox.pack_start(margin_grid, False, False, 0)
+        frame.add(vbox)
+        self.pack_start(frame, False, False, 0)
+        
+        # Advanced options
+        frame = Gtk.Frame(label="고급 옵션")
+        vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
+        vbox.set_border_width(10)
+        
+        self.keep_aspect = Gtk.CheckButton(label="가로세로 비율 유지")
+        self.keep_aspect.set_active(True)
+        vbox.pack_start(self.keep_aspect, False, False, 0)
+        
+        hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=5)
+        hbox.pack_start(Gtk.Label(label="회전:"), False, False, 0)
+        self.rotation = Gtk.ComboBoxText()
+        self.rotation.append_text("자동")
+        self.rotation.append_text("0°")
+        self.rotation.append_text("90°")
+        self.rotation.append_text("180°")
+        self.rotation.append_text("270°")
+        self.rotation.set_active(0)
+        hbox.pack_start(self.rotation, False, False, 0)
+        vbox.pack_start(hbox, False, False, 0)
+        
+        hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=5)
+        hbox.pack_start(Gtk.Label(label="DPI:"), False, False, 0)
+        self.dpi = Gtk.ComboBoxText()
+        self.dpi.append_text("150")
+        self.dpi.append_text("300")
+        self.dpi.append_text("600")
+        self.dpi.set_active(1)
+        hbox.pack_start(self.dpi, False, False, 0)
+        vbox.pack_start(hbox, False, False, 0)
+        
+        frame.add(vbox)
+        self.pack_start(frame, False, False, 0)
+        
+        self.show_all()
+    
+    def get_settings(self):
+        if self.scale_fit.get_active():
+            settings.scale_mode = 'fit'
+        elif self.scale_actual.get_active():
+            settings.scale_mode = 'actual'
+        elif self.scale_shrink.get_active():
+            settings.scale_mode = 'shrink'
+        else:
+            settings.scale_mode = 'custom'
+            settings.custom_scale = self.custom_scale_spin.get_value()
+        
+        if self.align_center.get_active():
+            settings.alignment = 'center'
+        elif self.align_topleft.get_active():
+            settings.alignment = 'topleft'
+        elif self.align_topright.get_active():
+            settings.alignment = 'topright'
+        elif self.align_bottomleft.get_active():
+            settings.alignment = 'bottomleft'
+        else:
+            settings.alignment = 'bottomright'
+        
+        if self.margin_none.get_active():
+            settings.margin_mode = 'none'
+        elif self.margin_default.get_active():
+            settings.margin_mode = 'default'
+        else:
+            settings.margin_mode = 'custom'
+            settings.margins['top'] = self.margin_top.get_value()
+            settings.margins['bottom'] = self.margin_bottom.get_value()
+            settings.margins['left'] = self.margin_left.get_value()
+            settings.margins['right'] = self.margin_right.get_value()
+        
+        settings.keep_aspect = self.keep_aspect.get_active()
+        
+        rotation_text = self.rotation.get_active_text()
+        if rotation_text == "자동":
+            settings.rotation = 'auto'
+        elif rotation_text == "0°":
+            settings.rotation = 0
+        elif rotation_text == "90°":
+            settings.rotation = 90
+        elif rotation_text == "180°":
+            settings.rotation = 180
+        else:
+            settings.rotation = 270
+        
+        settings.dpi = int(self.dpi.get_active_text())
+
+try:
+    files = os.environ.get('NAUTILUS_SCRIPT_SELECTED_FILE_PATHS', '').strip().split('\n')
+    files = [f for f in files if f]
+    
+    debug_log.write(f"Files received: {files}\n")
+    
+    if not files:
+        debug_log.write("No files selected\n")
+        sys.exit(1)
+    
+    # Load all images
+    pixbufs = []
+    for f in files:
+        debug_log.write(f"Loading file: {f}\n")
+        pixbuf = GdkPixbuf.Pixbuf.new_from_file(f)
+        pixbufs.append(pixbuf)
+        debug_log.write(f"Pixbuf loaded: {pixbuf.get_width()}x{pixbuf.get_height()}\n")
+    
+    current_page = 0
+    
+    print_op = Gtk.PrintOperation()
+    print_op.set_n_pages(len(pixbufs))
+    
+    # Add custom tab
+    settings_widget = PrintSettingsWidget()
+    print_op.set_custom_tab_label("이미지 설정")
+    
+    def create_custom_widget(operation):
+        return settings_widget
+    
+    def custom_widget_apply(operation, widget):
+        widget.get_settings()
+        debug_log.write(f"Settings applied: scale={settings.scale_mode}, align={settings.alignment}\n")
+    
+    def begin_print(operation, context):
+        debug_log.write(f"Begin print, pages: {len(pixbufs)}\n")
+    
+    def draw_page(operation, context, page_nr):
+        debug_log.write(f"Drawing page {page_nr}\n")
+        
+        pixbuf = pixbufs[page_nr]
+        cr = context.get_cairo_context()
+        
+        page_width = context.get_width()
+        page_height = context.get_height()
+        
+        # Apply margins (convert mm to points: 1mm = 2.83465 points)
+        if settings.margin_mode == 'none':
+            margins = {'top': 0, 'bottom': 0, 'left': 0, 'right': 0}
+        elif settings.margin_mode == 'custom':
+            margins = {k: v * 2.83465 for k, v in settings.margins.items()}
+        else:
+            margins = {'top': 28.3465, 'bottom': 28.3465, 'left': 28.3465, 'right': 28.3465}
+        
+        content_width = page_width - margins['left'] - margins['right']
+        content_height = page_height - margins['top'] - margins['bottom']
+        
+        img_width = pixbuf.get_width()
+        img_height = pixbuf.get_height()
+        
+        # Calculate scale
+        if settings.scale_mode == 'fit':
+            scale = min(content_width / img_width, content_height / img_height)
+        elif settings.scale_mode == 'actual':
+            scale = settings.dpi / 72.0
+        elif settings.scale_mode == 'shrink':
+            scale = min(1.0, min(content_width / img_width, content_height / img_height))
+        else:  # custom
+            scale = settings.custom_scale / 100.0
+        
+        scaled_width = img_width * scale
+        scaled_height = img_height * scale
+        
+        # Calculate position based on alignment
+        if settings.alignment == 'center':
+            x = margins['left'] + (content_width - scaled_width) / 2
+            y = margins['top'] + (content_height - scaled_height) / 2
+        elif settings.alignment == 'topleft':
+            x = margins['left']
+            y = margins['top']
+        elif settings.alignment == 'topright':
+            x = margins['left'] + content_width - scaled_width
+            y = margins['top']
+        elif settings.alignment == 'bottomleft':
+            x = margins['left']
+            y = margins['top'] + content_height - scaled_height
+        else:  # bottomright
+            x = margins['left'] + content_width - scaled_width
+            y = margins['top'] + content_height - scaled_height
+        
+        cr.translate(x, y)
+        cr.scale(scale, scale)
+        Gdk.cairo_set_source_pixbuf(cr, pixbuf, 0, 0)
+        cr.paint()
+        
+        debug_log.write(f"Page {page_nr} drawn: scale={scale}, pos=({x},{y})\n")
+    
+    print_op.connect("create-custom-widget", create_custom_widget)
+    print_op.connect("custom-widget-apply", custom_widget_apply)
+    print_op.connect("begin-print", begin_print)
+    print_op.connect("draw-page", draw_page)
+    
+    debug_log.write("Running print dialog\n")
+    result = print_op.run(Gtk.PrintOperationAction.PRINT_DIALOG, None)
+    debug_log.write(f"Print dialog result: {result}\n")
+    
+except Exception as e:
+    debug_log.write(f"ERROR: {str(e)}\n")
+    import traceback
+    debug_log.write(traceback.format_exc())
+finally:
+    debug_log.close()
