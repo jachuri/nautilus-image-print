@@ -225,7 +225,16 @@ try:
     
     print_op = Gtk.PrintOperation()
     print_op.set_n_pages(len(pixbufs))
-    
+
+    # PageSetup 생성 및 설정 - 페이지 방향 선택 가능하도록
+    page_setup = Gtk.PageSetup()
+    page_setup.set_orientation(Gtk.PageOrientation.PORTRAIT)  # 기본값: 세로
+    print_op.set_default_page_setup(page_setup)
+
+    # PrintSettings 설정 - 인쇄 옵션 활성화
+    print_settings = Gtk.PrintSettings()
+    print_op.set_print_settings(print_settings)
+
     # Add custom tab
     settings_widget = PrintSettingsWidget()
     print_op.set_custom_tab_label("이미지 설정")
