@@ -20,6 +20,7 @@ class PrintSettings:
         self.rotation = 'auto'  # auto, 0, 90, 180, 270
         self.dpi = 300
         self.multi_mode = 'one_per_page'  # one_per_page, grid_2x2, grid_3x3
+        self.orientation = 'portrait'  # portrait, landscape
         
 settings = PrintSettings()
 
@@ -54,7 +55,20 @@ class PrintSettingsWidget(Gtk.Box):
         vbox.pack_start(hbox, False, False, 0)
         frame.add(vbox)
         self.pack_start(frame, False, False, 0)
-        
+
+        # Page orientation
+        frame = Gtk.Frame(label="페이지 방향")
+        vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
+        vbox.set_border_width(10)
+
+        self.orientation_portrait = Gtk.RadioButton.new_with_label_from_widget(None, "세로 (Portrait)")
+        self.orientation_landscape = Gtk.RadioButton.new_with_label_from_widget(self.orientation_portrait, "가로 (Landscape)")
+
+        vbox.pack_start(self.orientation_portrait, False, False, 0)
+        vbox.pack_start(self.orientation_landscape, False, False, 0)
+        frame.add(vbox)
+        self.pack_start(frame, False, False, 0)
+
         # Alignment
         frame = Gtk.Frame(label="정렬")
         vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
@@ -188,7 +202,12 @@ class PrintSettingsWidget(Gtk.Box):
             settings.margins['right'] = self.margin_right.get_value()
         
         settings.keep_aspect = self.keep_aspect.get_active()
-        
+
+        if self.orientation_portrait.get_active():
+            settings.orientation = 'portrait'
+        else:
+            settings.orientation = 'landscape'
+
         rotation_text = self.rotation.get_active_text()
         if rotation_text == "자동":
             settings.rotation = 'auto'
@@ -244,7 +263,14 @@ try:
     
     def custom_widget_apply(operation, widget):
         widget.get_settings()
-        debug_log.write(f"Settings applied: scale={settings.scale_mode}, align={settings.alignment}\n")
+        # 페이지 방향 적용
+        page_setup = operation.get_default_page_setup()
+        if settings.orientation == 'portrait':
+            page_setup.set_orientation(Gtk.PageOrientation.PORTRAIT)
+        else:
+            page_setup.set_orientation(Gtk.PageOrientation.LANDSCAPE)
+        operation.set_default_page_setup(page_setup)
+        debug_log.write(f"Settings applied: scale={settings.scale_mode}, align={settings.alignment}, orientation={settings.orientation}\n")
     
     def begin_print(operation, context):
         debug_log.write(f"Begin print, pages: {len(pixbufs)}\n")
