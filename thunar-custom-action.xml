@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<actions>
+<action>
+	<icon>printer</icon>
+	<name>이미지 인쇄</name>
+	<submenu></submenu>
+	<unique-id>1729527123456789-1</unique-id>
+	<command>~/.local/bin/thunar-image-print %F</command>
+	<description>고급 옵션으로 이미지 파일 인쇄</description>
+	<patterns>*.jpg;*.jpeg;*.png;*.gif;*.bmp;*.tiff;*.tif;*.webp;*.svg;*.ico</patterns>
+	<startup-notify/>
+	<image-files/>
+</action>
+</actions>

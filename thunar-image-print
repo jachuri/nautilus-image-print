@@ -1,0 +1,23 @@
+#!/bin/bash
+# Thunar Image Print - 래퍼 스크립트
+# Thunar 커스텀 액션에서 호출되어 메인 인쇄 스크립트로 전달
+
+# Thunar는 %F 형식으로 파일들을 공백으로 구분하여 전달
+# Nautilus 스크립트 형식(줄바꿈 구분)으로 변환 필요
+
+# 인자로 받은 모든 파일 경로들을 줄바꿈으로 구분된 형식으로 변환
+FILE_PATHS=""
+for file in "$@"; do
+    if [ -z "$FILE_PATHS" ]; then
+        FILE_PATHS="$file"
+    else
+        FILE_PATHS="$FILE_PATHS
+$file"
+    fi
+done
+
+# 환경변수 설정하고 메인 인쇄 스크립트 실행
+export NAUTILUS_SCRIPT_SELECTED_FILE_PATHS="$FILE_PATHS"
+
+# 메인 인쇄 스크립트 실행
+exec ~/.local/share/nautilus/scripts/.hidden/인쇄
